@@ -32,11 +32,12 @@ class DataEmbedderTestCase(unittest.TestCase):
         self.assertEqual("body coordinates", dataEmbedder.getMaterialCoordinatesField().getName())
         self.assertEqual("marker", dataEmbedder.getDataMarkerGroup().getName())
         groupNames = dataEmbedder.getGroupNames()
-        self.assertEqual(7, len(groupNames))
+        self.assertEqual(8, len(groupNames))
         self.assertTrue(dataEmbedder.isGroupEmbed("cube"))
         self.assertTrue(dataEmbedder.isGroupEmbed("square"))
         self.assertTrue(dataEmbedder.isGroupEmbed("line"))
         self.assertTrue(dataEmbedder.isGroupEmbed("ICN"))
+        self.assertTrue(dataEmbedder.isGroupEmbed("nerve"))
         self.assertFalse(dataEmbedder.isGroupEmbed("bottom"))
         self.assertFalse(dataEmbedder.isGroupEmbed("marker"))
         self.assertFalse(dataEmbedder.isGroupEmbed("tip 2"))
@@ -45,10 +46,12 @@ class DataEmbedderTestCase(unittest.TestCase):
         self.assertEqual(2, dataEmbedder.getGroupDimension("square"))
         self.assertEqual(1, dataEmbedder.getGroupDimension("line"))
         self.assertEqual(0, dataEmbedder.getGroupDimension("ICN"))
+        self.assertEqual(1, dataEmbedder.getGroupDimension("nerve"))
         self.assertEqual(1, dataEmbedder.getGroupSize("cube"))
         self.assertEqual(1, dataEmbedder.getGroupSize("square"))
         self.assertEqual(1, dataEmbedder.getGroupSize("line"))
         self.assertEqual(4, dataEmbedder.getGroupSize("ICN"))
+        self.assertEqual(3, dataEmbedder.getGroupSize("nerve"))
         # test setting and unsetting embed flag
         dataEmbedder.setGroupEmbed("bottom", True)
         self.assertTrue(dataEmbedder.isGroupEmbed("bottom"))
@@ -56,13 +59,16 @@ class DataEmbedderTestCase(unittest.TestCase):
         self.assertFalse(dataEmbedder.isGroupEmbed("bottom"))
 
         outputRegion = dataEmbedder.generateOutput()
-        outputRegion.writeFile("c:/Users/gchr006/oc/src/dataembedder/tests/resources/km_output.exf")
+        self.assertTrue(outputRegion.isValid())
+
         # check output
+        # note that the nerve group coordinates were partially outside the host domain, but its
+        # body coordinates are forced to the nearest locations on the boundary where outside
         outputFieldmodule = outputRegion.getFieldmodule()
         outputBodyCoordinates = outputFieldmodule.findFieldByName("body coordinates").castFiniteElement()
         self.assertTrue(outputBodyCoordinates.isValid())
         outputGroups = get_group_list(outputFieldmodule)
-        self.assertEqual(5, len(outputGroups))
+        self.assertEqual(6, len(outputGroups))
         expectedBodyCoordinatesRange = {
             'ICN': ([0.4234094227546622, 0.48078031509540764, 0.24053424057686418],
                 [0.4714586372862805, 0.5096098437995359, 0.2789736122606712]),
@@ -72,6 +78,8 @@ class DataEmbedderTestCase(unittest.TestCase):
                 [1.8648858589797928, 0.21170471264989535, 0.11560628106112401]),
             'marker': ([0.4234094227546622, 0.48078031509540764, 0.24053424057686418],
                 [0.4714586372862805, 0.5096098437995359, 0.2789736122606712]),
+            'nerve': ([0.6828751816364316, 0.11560627908676875, 0.8843937155748031],
+                [1.4324429293766905, 0.7882952832850739, 1.0]),
             'square': ([0.7117047095185545, 0.21170471264989535, 0.11560628106112401],
                 [1.2882952853460443, 0.7882952884758264, 0.1156062839099075])}
         outputNodes = outputFieldmodule.findNodesetByFieldDomainType(Field.DOMAIN_TYPE_NODES)
@@ -79,7 +87,7 @@ class DataEmbedderTestCase(unittest.TestCase):
         TOL = 1.0E-12
         for group in outputGroups:
             groupName = group.getName()
-            nodeset = outputNodes if groupName in ("cube", "square", "line") else outputDatapoints
+            nodeset = outputNodes if groupName in ("cube", "square", "line", "nerve") else outputDatapoints
             min, max = evaluate_field_nodeset_range(outputBodyCoordinates,
                                                     group.getFieldNodeGroup(nodeset).getNodesetGroup())
             assertAlmostEqualList(self, min, expectedBodyCoordinatesRange[groupName][0], TOL)
@@ -103,11 +111,12 @@ class DataEmbedderTestCase(unittest.TestCase):
         self.assertEqual("fitted coordinates", dataEmbedder2.getMaterialCoordinatesField().getName())
         self.assertEqual("marker", dataEmbedder2.getDataMarkerGroup().getName())
         groupNames = dataEmbedder2.getGroupNames()
-        self.assertEqual(7, len(groupNames))
+        self.assertEqual(8, len(groupNames))
         self.assertTrue(dataEmbedder2.isGroupEmbed("cube"))
         self.assertTrue(dataEmbedder2.isGroupEmbed("square"))
         self.assertFalse(dataEmbedder2.isGroupEmbed("line"))
         self.assertTrue(dataEmbedder2.isGroupEmbed("ICN"))
+        self.assertTrue(dataEmbedder2.isGroupEmbed("nerve"))
         self.assertTrue(dataEmbedder2.isGroupEmbed("bottom"))
         self.assertFalse(dataEmbedder2.isGroupEmbed("marker"))
         self.assertFalse(dataEmbedder2.isGroupEmbed("tip 2"))
