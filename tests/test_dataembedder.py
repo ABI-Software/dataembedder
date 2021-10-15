@@ -3,16 +3,16 @@ import unittest
 from opencmiss.utils.zinc.field import get_group_list
 from opencmiss.utils.zinc.finiteelement import evaluate_field_nodeset_range
 from opencmiss.zinc.field import Field
-#from opencmiss.zinc.node import Node, Nodeset
-#from opencmiss.zinc.result import RESULT_OK
 from dataembedder.dataembedder import DataEmbedder
 
 here = os.path.abspath(os.path.dirname(__file__))
+
 
 def assertAlmostEqualList(testcase, actualList, expectedList, delta):
     assert len(actualList) == len(expectedList)
     for actual, expected in zip(actualList, expectedList):
         testcase.assertAlmostEqual(actual, expected, delta=delta)
+
 
 class DataEmbedderTestCase(unittest.TestCase):
 
@@ -31,32 +31,32 @@ class DataEmbedderTestCase(unittest.TestCase):
         self.assertEqual("fitted coordinates", dataEmbedder.getFittedCoordinatesField().getName())
         self.assertEqual("body coordinates", dataEmbedder.getMaterialCoordinatesField().getName())
         self.assertEqual("marker", dataEmbedder.getDataMarkerGroup().getName())
-        groupNames = dataEmbedder.getGroupNames()
+        groupNames = dataEmbedder.getDataGroupNames()
         self.assertEqual(8, len(groupNames))
-        self.assertTrue(dataEmbedder.isGroupEmbed("cube"))
-        self.assertTrue(dataEmbedder.isGroupEmbed("square"))
-        self.assertTrue(dataEmbedder.isGroupEmbed("line"))
-        self.assertTrue(dataEmbedder.isGroupEmbed("ICN"))
-        self.assertTrue(dataEmbedder.isGroupEmbed("nerve"))
-        self.assertFalse(dataEmbedder.isGroupEmbed("bottom"))
-        self.assertFalse(dataEmbedder.isGroupEmbed("marker"))
-        self.assertFalse(dataEmbedder.isGroupEmbed("tip 2"))
-        self.assertFalse(dataEmbedder.hasGroup("tip 1"))
-        self.assertEqual(3, dataEmbedder.getGroupDimension("cube"))
-        self.assertEqual(2, dataEmbedder.getGroupDimension("square"))
-        self.assertEqual(1, dataEmbedder.getGroupDimension("line"))
-        self.assertEqual(0, dataEmbedder.getGroupDimension("ICN"))
-        self.assertEqual(1, dataEmbedder.getGroupDimension("nerve"))
-        self.assertEqual(1, dataEmbedder.getGroupSize("cube"))
-        self.assertEqual(1, dataEmbedder.getGroupSize("square"))
-        self.assertEqual(1, dataEmbedder.getGroupSize("line"))
-        self.assertEqual(4, dataEmbedder.getGroupSize("ICN"))
-        self.assertEqual(3, dataEmbedder.getGroupSize("nerve"))
+        self.assertTrue(dataEmbedder.isDataGroupEmbed("cube"))
+        self.assertTrue(dataEmbedder.isDataGroupEmbed("square"))
+        self.assertTrue(dataEmbedder.isDataGroupEmbed("line"))
+        self.assertTrue(dataEmbedder.isDataGroupEmbed("ICN"))
+        self.assertTrue(dataEmbedder.isDataGroupEmbed("nerve"))
+        self.assertFalse(dataEmbedder.isDataGroupEmbed("bottom"))
+        self.assertFalse(dataEmbedder.isDataGroupEmbed("marker"))
+        self.assertFalse(dataEmbedder.isDataGroupEmbed("tip 2"))
+        self.assertFalse(dataEmbedder.hasDataGroup("tip 1"))
+        self.assertEqual(3, dataEmbedder.getDataGroupDimension("cube"))
+        self.assertEqual(2, dataEmbedder.getDataGroupDimension("square"))
+        self.assertEqual(1, dataEmbedder.getDataGroupDimension("line"))
+        self.assertEqual(0, dataEmbedder.getDataGroupDimension("ICN"))
+        self.assertEqual(1, dataEmbedder.getDataGroupDimension("nerve"))
+        self.assertEqual(1, dataEmbedder.getDataGroupSize("cube"))
+        self.assertEqual(1, dataEmbedder.getDataGroupSize("square"))
+        self.assertEqual(1, dataEmbedder.getDataGroupSize("line"))
+        self.assertEqual(4, dataEmbedder.getDataGroupSize("ICN"))
+        self.assertEqual(3, dataEmbedder.getDataGroupSize("nerve"))
         # test setting and unsetting embed flag
-        dataEmbedder.setGroupEmbed("bottom", True)
-        self.assertTrue(dataEmbedder.isGroupEmbed("bottom"))
-        dataEmbedder.setGroupEmbed("bottom", False)
-        self.assertFalse(dataEmbedder.isGroupEmbed("bottom"))
+        dataEmbedder.setDataGroupEmbed("bottom", True)
+        self.assertTrue(dataEmbedder.isDataGroupEmbed("bottom"))
+        dataEmbedder.setDataGroupEmbed("bottom", False)
+        self.assertFalse(dataEmbedder.isDataGroupEmbed("bottom"))
 
         outputRegion = dataEmbedder.generateOutput()
         self.assertTrue(outputRegion.isValid())
@@ -88,18 +88,18 @@ class DataEmbedderTestCase(unittest.TestCase):
         for group in outputGroups:
             groupName = group.getName()
             nodeset = outputNodes if groupName in ("cube", "square", "line", "nerve") else outputDatapoints
-            min, max = evaluate_field_nodeset_range(outputBodyCoordinates,
+            minX, maxX = evaluate_field_nodeset_range(outputBodyCoordinates,
                                                     group.getFieldNodeGroup(nodeset).getNodesetGroup())
-            assertAlmostEqualList(self, min, expectedBodyCoordinatesRange[groupName][0], TOL)
-            assertAlmostEqualList(self, max, expectedBodyCoordinatesRange[groupName][1], TOL)
+            assertAlmostEqualList(self, minX, expectedBodyCoordinatesRange[groupName][0], TOL)
+            assertAlmostEqualList(self, maxX, expectedBodyCoordinatesRange[groupName][1], TOL)
 
         # change some settings to test serialisation
-        coordinatesField = dataEmbedder.getRootRegion().getFieldmodule().findFieldByName("fitted coordinates")
+        coordinatesField = dataEmbedder.getHostRegion().getFieldmodule().findFieldByName("fitted coordinates")
         self.assertTrue(coordinatesField.isValid())
         dataEmbedder.setMaterialCoordinatesField(coordinatesField)
         self.assertEqual("fitted coordinates", dataEmbedder.getMaterialCoordinatesField().getName())
-        dataEmbedder.setGroupEmbed("line", False)
-        dataEmbedder.setGroupEmbed("bottom", True)
+        dataEmbedder.setDataGroupEmbed("line", False)
+        dataEmbedder.setDataGroupEmbed("bottom", True)
         jsonString = dataEmbedder.encodeSettingsJSON()
 
         dataEmbedder2 = DataEmbedder(zincScaffoldFileName, zincFittedGeometryFileName, zincDataFileName)
@@ -110,16 +110,16 @@ class DataEmbedderTestCase(unittest.TestCase):
         self.assertEqual("fitted coordinates", dataEmbedder2.getFittedCoordinatesField().getName())
         self.assertEqual("fitted coordinates", dataEmbedder2.getMaterialCoordinatesField().getName())
         self.assertEqual("marker", dataEmbedder2.getDataMarkerGroup().getName())
-        groupNames = dataEmbedder2.getGroupNames()
+        groupNames = dataEmbedder2.getDataGroupNames()
         self.assertEqual(8, len(groupNames))
-        self.assertTrue(dataEmbedder2.isGroupEmbed("cube"))
-        self.assertTrue(dataEmbedder2.isGroupEmbed("square"))
-        self.assertFalse(dataEmbedder2.isGroupEmbed("line"))
-        self.assertTrue(dataEmbedder2.isGroupEmbed("ICN"))
-        self.assertTrue(dataEmbedder2.isGroupEmbed("nerve"))
-        self.assertTrue(dataEmbedder2.isGroupEmbed("bottom"))
-        self.assertFalse(dataEmbedder2.isGroupEmbed("marker"))
-        self.assertFalse(dataEmbedder2.isGroupEmbed("tip 2"))
+        self.assertTrue(dataEmbedder2.isDataGroupEmbed("cube"))
+        self.assertTrue(dataEmbedder2.isDataGroupEmbed("square"))
+        self.assertFalse(dataEmbedder2.isDataGroupEmbed("line"))
+        self.assertTrue(dataEmbedder2.isDataGroupEmbed("ICN"))
+        self.assertTrue(dataEmbedder2.isDataGroupEmbed("nerve"))
+        self.assertTrue(dataEmbedder2.isDataGroupEmbed("bottom"))
+        self.assertFalse(dataEmbedder2.isDataGroupEmbed("marker"))
+        self.assertFalse(dataEmbedder2.isDataGroupEmbed("tip 2"))
 
 
 if __name__ == "__main__":
