@@ -7,7 +7,7 @@ import sys
 from opencmiss.utils.zinc.field import get_group_list
 from opencmiss.utils.zinc.general import ChangeManager
 from opencmiss.zinc.context import Context
-from opencmiss.zinc.element import Mesh
+from opencmiss.zinc.element import Mesh, MeshGroup
 from opencmiss.zinc.field import Field, FieldFindMeshLocation, FieldFiniteElement, FieldGroup
 from opencmiss.zinc.region import Region
 from opencmiss.zinc.result import RESULT_OK, RESULT_WARNING_PART_DONE
@@ -37,6 +37,10 @@ class DataEmbedder:
         self._outputDataRegion = None
         self._hostMesh = None
         self._hostBoundaryMesh = None
+        self._fittedGroup = None
+        self._fittedMeshGroup = None
+        self._fittedBoundaryGroup = None
+        self._fittedBoundaryMeshGroup = None
         self._fittedCoordinatesField = None
         self._fittedCoordinatesFieldName = None
         self._materialCoordinatesField = None
@@ -92,12 +96,16 @@ class DataEmbedder:
         return json.dumps(dct, sort_keys=False, indent=4)
 
     def _clearFields(self):
-        self._dataCoordinatesField = None
+        self._fittedGroup = None
+        self._fittedMeshGroup = None
+        self._fittedBoundaryGroup = None
+        self._fittedBoundaryMeshGroup = None
         self._fittedCoordinatesField = None
         self._materialCoordinatesField = None
         self._hostMarkerGroup = None
         self._hostMarkerLocationField = None
         self._hostMarkerNameField = None
+        self._dataCoordinatesField = None
         self._dataMarkerGroup = None
         self._dataMarkerCoordinatesField = None
         self._dataMarkerNameField = None
@@ -200,6 +208,7 @@ class DataEmbedder:
                     self._fittedCoordinatesField.getNumberOfComponents())
                 findMeshLocationField = hostFieldmodule.createFieldFindMeshLocation(
                     self._coordinatesArgumentField, self._fittedCoordinatesField, self._hostMesh)
+                findMeshLocationField.setSearchMesh(self._fittedMeshGroup)
                 if self._hostMesh.getDimension() == 3:
                     # workaround for nearest around the boundary which doesn't work in 3D
                     # if no exact location found in host mesh, find nearest on the boundary mesh
@@ -210,7 +219,7 @@ class DataEmbedder:
                     # want locations on the host mesh, but to search on the boundary mesh
                     findBoundaryMeshLocationField = hostFieldmodule.createFieldFindMeshLocation(
                         self._coordinatesArgumentField, self._fittedCoordinatesField, self._hostMesh)
-                    findBoundaryMeshLocationField.setSearchMesh(self._hostBoundaryMesh)
+                    findBoundaryMeshLocationField.setSearchMesh(self._fittedBoundaryMeshGroup)
                     findBoundaryMeshLocationField.setSearchMode(FieldFindMeshLocation.SEARCH_MODE_NEAREST)
                     hostBoundaryMaterialCoordinatesField = hostFieldmodule.createFieldEmbedded(
                         self._materialCoordinatesField, findBoundaryMeshLocationField)
@@ -320,6 +329,29 @@ class DataEmbedder:
             if self._fittedCoordinatesField:
                 self._fittedCoordinatesFieldName = self._fittedCoordinatesField.getName()
 
+            # get highest dimension mesh in host, and its boundary mesh (dimension - 1)
+            for dimension in range(3, 0, -1):
+                hostMesh = hostFieldmodule.findMeshByDimension(dimension)
+                if hostMesh.getSize() > 0:
+                    self._hostMesh = hostMesh
+                    if dimension > 1:
+                        self._hostBoundaryMesh = hostFieldmodule.findMeshByDimension(dimension - 1)
+                    break
+
+            # make group from elements where fitted field is defined, and its boundary
+            self._fittedGroup = hostFieldmodule.createFieldGroup()
+            self._fittedGroup.setName("fitted")
+            self._fittedGroup.setSubelementHandlingMode(FieldGroup.SUBELEMENT_HANDLING_MODE_FULL)
+            self._fittedMeshGroup = self._fittedGroup.createFieldElementGroup(self._hostMesh).getMeshGroup()
+            self._fittedMeshGroup.addElementsConditional(hostFieldmodule.createFieldConstant(1.0))
+            if self._hostBoundaryMesh:
+                self._fittedBoundaryGroup = hostFieldmodule.createFieldGroup()
+                self._fittedBoundaryGroup.setName("fitted boundary")
+                self._fittedBoundaryGroup.setSubelementHandlingMode(FieldGroup.SUBELEMENT_HANDLING_MODE_FULL)
+                self._fittedBoundaryMeshGroup =\
+                    self._fittedBoundaryGroup.createFieldElementGroup(self._hostBoundaryMesh).getMeshGroup()
+                self._fittedBoundaryMeshGroup.addElementsConditional(hostFieldmodule.createFieldIsExterior())
+
             result = self._hostRegion.readFile(self._zincScaffoldFileName)
             assert result == RESULT_OK, "Failed to load scaffold file" + str(self._zincScaffoldFileName)
             if not self._materialCoordinatesFieldName:
@@ -329,14 +361,6 @@ class DataEmbedder:
             if self._materialCoordinatesField:
                 self._materialCoordinatesFieldName = self._materialCoordinatesField.getName()
 
-            # get highest dimension mesh in host, and its boundary mesh (dimension - 1)
-            for dimension in range(3, 0, -1):
-                hostMesh = hostFieldmodule.findMeshByDimension(dimension)
-                if hostMesh.getSize() > 0:
-                    self._hostMesh = hostMesh
-                    if dimension > 1:
-                        self._hostBoundaryMesh = hostFieldmodule.findMeshByDimension(dimension - 1)
-                    break
             self._buildEmbeddedMapFields()
 
         dataFieldmodule = self._dataRegion.getFieldmodule()
@@ -376,22 +400,38 @@ class DataEmbedder:
         """
         return self._hostBoundaryMesh
 
-    def getFittedMesh(self) -> Mesh:
+    def getFittedGroup(self) -> FieldGroup:
         """
-        Get mesh from host region over which fitted coordintes are defined, in which data coordintes are found.
+        Get group containing elements over which fitted coordinates field is defined.
+        Only call after load().
+        :return: Zinc FieldGroup.
+        """
+        return self._fittedGroup
+
+    def getFittedMeshGroup(self) -> MeshGroup:
+        """
+        Get mesh from host region over which fitted coordinates are defined, in which data coordintes are found.
         Can be a subset of host mesh.
         Only call after load().
         :return: Zinc Mesh.
         """
-        return self._hostMesh  # GRC fix
+        return self._fittedMeshGroup
 
-    def getFittedBoundaryMesh(self) -> Mesh:
+    def getFittedBoundaryGroup(self) -> FieldGroup:
         """
-        Get boundary mesh from host region over which fitted coordintes are defined, and data coordinates found.
+        Get group containing boundary of elements over which fitted coordinates field is defined.
+        Only call after load().
+        :return: Zinc FieldGroup.
+        """
+        return self._fittedBoundaryGroup
+
+    def getFittedBoundaryMeshGroup(self) -> MeshGroup:
+        """
+        Get boundary mesh from host region over which fitted coordinates are defined, and data coordinates found.
         Only call after load().
         :return: Zinc Mesh.
         """
-        return self._hostBoundaryMesh  # GRC fix
+        return self._fittedBoundaryMeshGroup
 
     def getDataRegion(self) -> Region:
         """
