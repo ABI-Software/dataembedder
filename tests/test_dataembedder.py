@@ -8,10 +8,10 @@ from dataembedder.dataembedder import DataEmbedder
 here = os.path.abspath(os.path.dirname(__file__))
 
 
-def assertAlmostEqualList(testcase, actualList, expectedList, delta):
+def assertAlmostEqualList(testCase, actualList, expectedList, delta):
     assert len(actualList) == len(expectedList)
     for actual, expected in zip(actualList, expectedList):
-        testcase.assertAlmostEqual(actual, expected, delta=delta)
+        testCase.assertAlmostEqual(actual, expected, delta=delta)
 
 
 class DataEmbedderTestCase(unittest.TestCase):

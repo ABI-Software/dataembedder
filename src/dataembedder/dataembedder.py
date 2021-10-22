@@ -669,7 +669,7 @@ class DataEmbedder:
         """
         return groupName in self._groupData
 
-    def getDataGroupDimension(self, groupName: str) -> bool:
+    def getDataGroupDimension(self, groupName: str) -> int:
         """
         Get highest dimension in objects of data group of name.
         :param groupName: Name of the group
@@ -711,7 +711,7 @@ class DataEmbedder:
             print("DataEmbedder groupSetEmbed: no group of name " + str(groupName), file=sys.stderr)
         return False
 
-    def getDataGroupSize(self, groupName: str) -> bool:
+    def getDataGroupSize(self, groupName: str) -> int:
         """
         Get number of objects in data group of name of its highest dimension.
         :param groupName: Name of the group
@@ -848,7 +848,7 @@ class DataEmbedder:
         self._needGenerateOutput = False
         return self._outputDataRegion
 
-    def getOutputDataMaterialCoordinatesField(self) -> Field:
+    def getOutputDataMaterialCoordinatesField(self) -> FieldFiniteElement:
         return self._outputDataMaterialCoordinatesField
 
     def getOutputDataHostCoordinatesField(self, hostCoordinatesField: Field):
