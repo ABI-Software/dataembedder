@@ -5,7 +5,7 @@ Main class for fitting scaffolds.
 import json
 import sys
 from opencmiss.utils.zinc.field import get_group_list
-from opencmiss.utils.zinc.general import ChangeManager
+from opencmiss.utils.zinc.general import ChangeManager, HierarchicalChangeManager
 from opencmiss.zinc.context import Context
 from opencmiss.zinc.element import Mesh, MeshGroup
 from opencmiss.zinc.field import Field, FieldFindMeshLocation, FieldFiniteElement, FieldGroup
@@ -319,9 +319,9 @@ class DataEmbedder:
         self._hostMesh = None
         self._hostBoundaryMesh = None
         self._hostRegion = self._context.createRegion()
-        self._dataRegion = self._hostRegion.createChild("data")
-        hostFieldmodule = self._hostRegion.getFieldmodule()
-        with ChangeManager(hostFieldmodule):
+        with HierarchicalChangeManager(self._hostRegion):
+            self._dataRegion = self._hostRegion.createChild("data")
+            hostFieldmodule = self._hostRegion.getFieldmodule()
             result = self._hostRegion.readFile(self._zincFittedGeometryFileName)
             assert result == RESULT_OK, "Failed to load fitted geometry file" + str(self._zincFittedGeometryFileName)
             self._fittedCoordinatesField =\
@@ -363,16 +363,16 @@ class DataEmbedder:
 
             self._buildEmbeddedMapFields()
 
-        dataFieldmodule = self._dataRegion.getFieldmodule()
-        result = self._dataRegion.readFile(self._zincDataFileName)
-        assert result == RESULT_OK, "Failed to load data file" + str(self._zincDataFileName)
-        self._dataCoordinatesField = self._findCoordinatesField(dataFieldmodule, self._dataCoordinatesFieldName)
-        if self._dataCoordinatesField:
-            self._dataCoordinatesFieldName = self._dataCoordinatesField.getName()
+            dataFieldmodule = self._dataRegion.getFieldmodule()
+            result = self._dataRegion.readFile(self._zincDataFileName)
+            assert result == RESULT_OK, "Failed to load data file" + str(self._zincDataFileName)
+            self._dataCoordinatesField = self._findCoordinatesField(dataFieldmodule, self._dataCoordinatesFieldName)
+            if self._dataCoordinatesField:
+                self._dataCoordinatesFieldName = self._dataCoordinatesField.getName()
 
-        self._discoverHostMarkerGroup()
-        self._discoverDataMarkerGroup()
-        self._buildDataGroups()
+            self._discoverHostMarkerGroup()
+            self._discoverDataMarkerGroup()
+            self._buildDataGroups()
 
     def getContext(self) -> Context:
         return self._context
