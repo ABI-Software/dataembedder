@@ -4,7 +4,7 @@ Main class for fitting scaffolds.
 
 import json
 import sys
-from opencmiss.utils.zinc.field import get_group_list
+from opencmiss.utils.zinc.field import get_group_list, get_unique_field_name
 from opencmiss.utils.zinc.general import ChangeManager, HierarchicalChangeManager
 from opencmiss.zinc.context import Context
 from opencmiss.zinc.element import Mesh, MeshGroup
@@ -723,6 +723,13 @@ class DataEmbedder:
         print("DataEmbedder getGroupSize: no group of name " + str(groupName), file=sys.stderr)
         return -1
 
+    def printLog(self):
+        loggerMessageCount = self._logger.getNumberOfMessages()
+        if loggerMessageCount > 0:
+            for i in range(1, loggerMessageCount + 1):
+                print(self._logger.getMessageTypeAtIndex(i), self._logger.getMessageTextAtIndex(i))
+            self._logger.removeAllMessages()
+
     def generateOutput(self) -> Region:
         """
         Generate embedded data from the groups with their embed flag set.
@@ -802,40 +809,55 @@ class DataEmbedder:
             outputNodes.destroyNodesConditional(notEmbedGroup)
             outputDatapoints.destroyNodesConditional(notEmbedGroup)
             del notEmbedGroup
-            del embedGroup
             del embedMeshGroup
             del embedNodeGroup
             del embedDataGroup
-            # define material coordinates same as data coordinates by writing to memory buffer, renaming and re-reading
+            # define material coordinates identically to data coordinates by writing to a temporary EX format buffer
             # handle case where marker coordinates is a different field
-            differentMarkerCoordinates = self._dataMarkerCoordinatesField and \
-                (not (self._dataMarkerCoordinatesField == self._dataCoordinatesField))
             outputDataCoordinatesFieldNames = [self._dataCoordinatesFieldName]
-            if differentMarkerCoordinates:
+            if self._dataMarkerCoordinatesField and \
+                    (not (self._dataMarkerCoordinatesField == self._dataCoordinatesField)):
                 outputDataCoordinatesFieldNames.append(self._dataMarkerCoordinatesField.getName())
-            outputDataCoordinatesFields =\
-                [outputDataFieldmodule.findFieldByName(fieldName).castFiniteElement()
-                 for fieldName in outputDataCoordinatesFieldNames]
-            sir = self._outputDataRegion.createStreaminformationRegion()
-            srm = sir.createStreamresourceMemory()
-            sir.setResourceFieldNames(srm, outputDataCoordinatesFieldNames)
-            self._outputDataRegion.write(sir)
-            result, buffer = srm.getBuffer()
-            assert result == RESULT_OK, "Failed to write data coordinates to memory"
-            # rename fields in the buffer
-            for fieldName in outputDataCoordinatesFieldNames:
-                buffer = buffer.replace(bytes(fieldName + ", coordinate", "utf-8"),
-                                        bytes(self._materialCoordinatesFieldName + ", coordinate", "utf-8"))
-            sir = self._outputDataRegion.createStreaminformationRegion()
-            sir.createStreamresourceMemoryBuffer(buffer)
-            result = self._outputDataRegion.read(sir)
-            assert result == RESULT_OK, "Failed to define output material coordinates from memory buffer"
-            self._outputDataMaterialCoordinatesField =\
-                outputDataFieldmodule.findFieldByName(self._materialCoordinatesFieldName).castFiniteElement()
-            assert self._outputDataMaterialCoordinatesField.isValid(), "Failed to define output materiel coordinates field"
+            # handle host material coordinates field name already being in use in data,
+            # usually because it's also called "coordinates" --> prefix with "material " and warn
+            outputDataMaterialCoordinatesFieldName = self._materialCoordinatesFieldName
+            for outputDataCoordinatesFieldName in outputDataCoordinatesFieldNames:
+                if outputDataCoordinatesFieldName == outputDataMaterialCoordinatesFieldName:
+                    outputDataMaterialCoordinatesFieldName = get_unique_field_name(
+                        outputDataFieldmodule, "material " + outputDataMaterialCoordinatesFieldName)
+                    print("Warning: Data already has field '" + self._materialCoordinatesFieldName +
+                        "' defined on it. Defining material coordinates on it with name '" +
+                        outputDataMaterialCoordinatesFieldName + "' instead.", file=sys.stderr)
+                    break
+            for outputDataCoordinatesFieldName in outputDataCoordinatesFieldNames:
+                outputDataCoordinatesField = outputDataFieldmodule.findFieldByName(outputDataCoordinatesFieldName)
+                # temporarily rename field for output
+                outputDataCoordinatesField.setName(outputDataMaterialCoordinatesFieldName)
+                sir = self._outputDataRegion.createStreaminformationRegion()
+                srm = sir.createStreamresourceMemory()
+                sir.setResourceFieldNames(srm, [outputDataMaterialCoordinatesFieldName])
+                # workaround for Zinc writing empty groups when no members have above field defined on them
+                sir.setResourceGroupName(srm, embedGroup.getName())
+                self._outputDataRegion.write(sir)
+                result, buffer = srm.getBuffer()
+                assert result == RESULT_OK, "Failed to write data coordinates to memory"
+                # restore field name before reading back in the cloned field
+                outputDataCoordinatesField.setName(outputDataCoordinatesFieldName)
+                sir = self._outputDataRegion.createStreaminformationRegion()
+                sir.createStreamresourceMemoryBuffer(buffer)
+                result = self._outputDataRegion.read(sir)
+                if result != RESULT_OK:
+                    self.printLog()
+                    assert False, "Failed to define output material coordinates from memory buffer"
+            self._outputDataMaterialCoordinatesField = \
+                outputDataFieldmodule.findFieldByName(outputDataMaterialCoordinatesFieldName).castFiniteElement()
+            assert self._outputDataMaterialCoordinatesField.isValid(), \
+                "Failed to define output material coordinates field"
+            del embedGroup
 
             # now do the embedding: evaluate material coordinates in output region
-            for field in outputDataCoordinatesFields:
+            for outputDataCoordinatesFieldName in outputDataCoordinatesFieldNames:
+                field = outputDataFieldmodule.findFieldByName(outputDataCoordinatesFieldName).castFiniteElement()
                 applyField = outputDataFieldmodule.createFieldApply(self._hostFindMaterialCoordinatesField)
                 result = applyField.setBindArgumentSourceField(self._coordinatesArgumentField, field)
                 assert result == RESULT_OK, "Failed to set bind argument source field in output"
