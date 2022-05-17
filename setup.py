@@ -22,13 +22,13 @@ readme = readfile("README.rst", split=True)[3:]  # skip title
 requires = [
     # minimal requirements listing
     "opencmiss.utils >= 0.3",
-    "opencmiss.zinc >= 3.5"
+    "opencmiss.zinc >= 3.7"
 ]
 source_license = readfile("LICENSE")
 
 setup(
     name="dataembedder",
-    version="0.1.0",
+    version="0.2.0",
     description="Python library for embedding data and models in anatomical scaffolds using OpenCMISS-Zinc",
     long_description="\n".join(readme) + source_license,
     classifiers=[
