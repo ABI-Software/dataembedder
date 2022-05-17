@@ -874,6 +874,11 @@ class DataEmbedder:
         return self._outputDataMaterialCoordinatesField
 
     def getOutputDataHostCoordinatesField(self, hostCoordinatesField: Field):
+        """
+        Get a field giving host coordinates from data material coordinates. For UI/visualisation use.
+        :param hostCoordinatesField: Field to evaluate on host.
+        :return: Field giving host coordinates on data at matching material coordinates.
+        """
         if not hostCoordinatesField:
             return None
         assert hostCoordinatesField.getFieldmodule().getRegion() == self._hostRegion
@@ -881,6 +886,8 @@ class DataEmbedder:
         with ChangeManager(hostFieldmodule):
             findMaterialMeshLocationField = hostFieldmodule.createFieldFindMeshLocation(
                 self._coordinatesArgumentField, self._materialCoordinatesField, self._hostMesh)
+            # use SEARCH_MODE_NEAREST as derivatives or minor errors may give locations outside host mesh
+            findMaterialMeshLocationField.setSearchMode(FieldFindMeshLocation.SEARCH_MODE_NEAREST)
             embeddedHostCoordinatesField =\
                 hostFieldmodule.createFieldEmbedded(hostCoordinatesField, findMaterialMeshLocationField)
             outputDataFieldmodule = self._outputDataRegion.getFieldmodule()
