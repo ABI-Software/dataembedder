@@ -31,6 +31,7 @@ setup(
     version="0.2.0",
     description="Python library for embedding data and models in anatomical scaffolds using OpenCMISS-Zinc",
     long_description="\n".join(readme) + source_license,
+    long_description_content_type="text/x-rst",
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Programming Language :: Python",
