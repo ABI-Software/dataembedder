@@ -16,7 +16,7 @@ def readfile(filename, split=False):
         return stream.read()
 
 
-readme = readfile("README.rst", split=True)[3:]  # skip title
+readme = readfile("README.rst", split=True)
 # For requirements not hosted on PyPi place listings
 # into the 'requirements.txt' file.
 requires = [
@@ -24,6 +24,7 @@ requires = [
     "opencmiss.utils >= 0.3",
     "opencmiss.zinc >= 3.7"
 ]
+readme.extend(['', 'License', '=======', '', '::', ''])
 source_license = readfile("LICENSE")
 
 setup(
