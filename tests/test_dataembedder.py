@@ -32,7 +32,7 @@ class DataEmbedderTestCase(unittest.TestCase):
         self.assertEqual("body coordinates", dataEmbedder.getMaterialCoordinatesField().getName())
         self.assertEqual("marker", dataEmbedder.getDataMarkerGroup().getName())
         groupNames = dataEmbedder.getDataGroupNames()
-        self.assertEqual(8, len(groupNames))
+        self.assertEqual(7, len(groupNames))
         self.assertTrue(dataEmbedder.isDataGroupEmbed("cube"))
         self.assertTrue(dataEmbedder.isDataGroupEmbed("square"))
         self.assertTrue(dataEmbedder.isDataGroupEmbed("line"))
@@ -40,7 +40,7 @@ class DataEmbedderTestCase(unittest.TestCase):
         self.assertTrue(dataEmbedder.isDataGroupEmbed("nerve"))
         self.assertFalse(dataEmbedder.isDataGroupEmbed("bottom"))
         self.assertFalse(dataEmbedder.isDataGroupEmbed("marker"))
-        self.assertFalse(dataEmbedder.isDataGroupEmbed("tip 2"))
+        self.assertFalse(dataEmbedder.hasDataGroup("tip 2"))
         self.assertFalse(dataEmbedder.hasDataGroup("tip 1"))
         self.assertEqual(3, dataEmbedder.getDataGroupDimension("cube"))
         self.assertEqual(2, dataEmbedder.getDataGroupDimension("square"))
@@ -111,7 +111,7 @@ class DataEmbedderTestCase(unittest.TestCase):
         self.assertEqual("fitted coordinates", dataEmbedder2.getMaterialCoordinatesField().getName())
         self.assertEqual("marker", dataEmbedder2.getDataMarkerGroup().getName())
         groupNames = dataEmbedder2.getDataGroupNames()
-        self.assertEqual(8, len(groupNames))
+        self.assertEqual(7, len(groupNames))
         self.assertTrue(dataEmbedder2.isDataGroupEmbed("cube"))
         self.assertTrue(dataEmbedder2.isDataGroupEmbed("square"))
         self.assertFalse(dataEmbedder2.isDataGroupEmbed("line"))
@@ -119,7 +119,6 @@ class DataEmbedderTestCase(unittest.TestCase):
         self.assertTrue(dataEmbedder2.isDataGroupEmbed("nerve"))
         self.assertTrue(dataEmbedder2.isDataGroupEmbed("bottom"))
         self.assertFalse(dataEmbedder2.isDataGroupEmbed("marker"))
-        self.assertFalse(dataEmbedder2.isDataGroupEmbed("tip 2"))
 
 
 if __name__ == "__main__":

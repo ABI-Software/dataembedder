@@ -10,7 +10,7 @@ from opencmiss.zinc.context import Context
 from opencmiss.zinc.element import Mesh, MeshGroup
 from opencmiss.zinc.field import Field, FieldFindMeshLocation, FieldFiniteElement, FieldGroup
 from opencmiss.zinc.region import Region
-from opencmiss.zinc.result import RESULT_OK, RESULT_WARNING_PART_DONE
+from opencmiss.zinc.result import RESULT_ERROR_NOT_FOUND, RESULT_OK, RESULT_WARNING_PART_DONE
 
 
 class DataEmbedder:
@@ -209,30 +209,31 @@ class DataEmbedder:
                 findMeshLocationField = hostFieldmodule.createFieldFindMeshLocation(
                     self._coordinatesArgumentField, self._fittedCoordinatesField, self._hostMesh)
                 findMeshLocationField.setSearchMesh(self._fittedMeshGroup)
-                if self._hostMesh.getDimension() == 3:
-                    # workaround for nearest around the boundary which doesn't work in 3D
-                    # if no exact location found in host mesh, find nearest on the boundary mesh
-                    findMeshLocationField.setSearchMode(FieldFindMeshLocation.SEARCH_MODE_EXACT)
-                    hostExactMaterialCoordinatesField = hostFieldmodule.createFieldEmbedded(
-                        self._materialCoordinatesField, findMeshLocationField)
-                    hasFoundMeshLocation = hostFieldmodule.createFieldIsDefined(findMeshLocationField)
-                    # want locations on the host mesh, but to search on the boundary mesh
-                    findBoundaryMeshLocationField = hostFieldmodule.createFieldFindMeshLocation(
-                        self._coordinatesArgumentField, self._fittedCoordinatesField, self._hostMesh)
-                    findBoundaryMeshLocationField.setSearchMesh(self._fittedBoundaryMeshGroup)
-                    findBoundaryMeshLocationField.setSearchMode(FieldFindMeshLocation.SEARCH_MODE_NEAREST)
-                    hostBoundaryMaterialCoordinatesField = hostFieldmodule.createFieldEmbedded(
-                        self._materialCoordinatesField, findBoundaryMeshLocationField)
-                    valid1 = hostExactMaterialCoordinatesField.isValid()
-                    valid2 = hostBoundaryMaterialCoordinatesField.isValid()
-                    valid3 = hasFoundMeshLocation.isValid()
-                    self._hostFindMaterialCoordinatesField = hostFieldmodule.createFieldIf(
-                        hasFoundMeshLocation, hostExactMaterialCoordinatesField, hostBoundaryMaterialCoordinatesField)
-                else:
-                    findMeshLocationField.setSearchMode(FieldFindMeshLocation.SEARCH_MODE_NEAREST)
-                    self._hostFindMaterialCoordinatesField = hostFieldmodule.createFieldEmbedded(
-                        self._materialCoordinatesField, findMeshLocationField)
+                findMeshLocationField.setSearchMode(FieldFindMeshLocation.SEARCH_MODE_NEAREST)
+                self._hostFindMaterialCoordinatesField = hostFieldmodule.createFieldEmbedded(
+                    self._materialCoordinatesField, findMeshLocationField)
                 assert self._hostFindMaterialCoordinatesField.isValid(), "Failed to create embedding map fields"
+
+    def _getHostMarkerNames(self):
+        """
+        Get marker names in scaffold since these may not have an associated zinc group.
+        :return: Set of distinct marker names in the host scaffold.
+        """
+        hostMarkerNames = set()
+        if self._hostMarkerGroup and self._hostMarkerNameField:
+            hostFieldmodule = self._hostRegion.getFieldmodule()
+            fieldcache = hostFieldmodule.createFieldcache()
+            hostNodes = hostFieldmodule.findNodesetByFieldDomainType(Field.DOMAIN_TYPE_NODES)
+            hostMarkerNodesetGroup = self._hostMarkerGroup.getFieldNodeGroup(hostNodes).getNodesetGroup()
+            nodeiter = hostMarkerNodesetGroup.createNodeiterator()
+            node = nodeiter.next()
+            while node.isValid():
+                fieldcache.setNode(node)
+                markerName = self._hostMarkerNameField.evaluateString(fieldcache)
+                if markerName:
+                    hostMarkerNames.add(markerName)
+                node = nodeiter.next()
+        return hostMarkerNames
 
     def _buildDataGroups(self):
         groupData = {}
@@ -271,38 +272,35 @@ class DataEmbedder:
                 self._dimensionToken: groupDimension,
                 self._sizeToken: groupSize
             }
-        # process data marker points making groups out of those with the same marker name
+
+        # process data marker points making groups out of those with the marker names not present in the host
         if self._dataMarkerGroup and self._dataMarkerNameField:
             fieldcache = dataFieldmodule.createFieldcache()
+            hostMarkerNames = self._getHostMarkerNames()
             dataMarkerNodesetGroup = self._dataMarkerGroup.getFieldNodeGroup(datapoints).getNodesetGroup()
             markerGroupData = {}
-            lastMarkerName = None
-            lastMarkerGroupDict = None
             nodeiter = dataMarkerNodesetGroup.createNodeiterator()
             node = nodeiter.next()
             while node.isValid():
                 fieldcache.setNode(node)
                 markerName = self._dataMarkerNameField.evaluateString(fieldcache)
                 if markerName:
-                    if markerName == lastMarkerName:
-                        markerGroupDict = lastMarkerGroupDict
-                    elif markerName in markerGroupData:
-                        lastMarkerGroupDict = markerGroupDict = markerGroupData[markerName]
-                        lastMarkerName = markerName
+                    markerGroupDict = markerGroupData.get(markerName)
+                    if markerGroupDict:
+                        markerGroupDict[self._sizeToken] += 1
                     else:
-                        groupIsInHost = hostFieldmodule.findFieldByName(markerName).castGroup().isValid()
-                        embed = not (groupIsInHost or (markerName == self._dataMarkerGroupName))
-                        lastMarkerGroupDict = markerGroupDict = {
+                        groupIsInHost = hostFieldmodule.findFieldByName(markerName).castGroup().isValid() or \
+                                        (markerName in hostMarkerNames)
+                        embed = not groupIsInHost
+                        markerGroupData[markerName] = markerGroupDict = {
                             self._embedToken: embed,
                             self._dimensionToken: 0,
-                            self._sizeToken: 0
+                            self._sizeToken: 1
                         }
-                        markerGroupData[markerName] = markerGroupDict
-                        lastMarkerName = markerName
-                    markerGroupDict[self._sizeToken] += 1
-                node = nodeiter.next()
-            markerGroupData.update(groupData)
-            groupData = markerGroupData
+                    node = nodeiter.next()
+            for markerName, markerGroupDict in markerGroupData.items():
+                if (markerName not in groupData) and markerGroupDict[self._embedToken]:
+                    groupData[markerName] = markerGroupDict
         # transfer embed flag from existing groupData before replacing
         for groupName, groupDict in groupData.items():
             embed = self.isDataGroupEmbed(groupName) if (groupName in self._groupData) else None
@@ -343,14 +341,17 @@ class DataEmbedder:
             self._fittedGroup.setName("fitted")
             self._fittedGroup.setSubelementHandlingMode(FieldGroup.SUBELEMENT_HANDLING_MODE_FULL)
             self._fittedMeshGroup = self._fittedGroup.createFieldElementGroup(self._hostMesh).getMeshGroup()
-            self._fittedMeshGroup.addElementsConditional(hostFieldmodule.createFieldConstant(1.0))
+            self._fittedMeshGroup.addElementsConditional(
+                hostFieldmodule.createFieldIsDefined(self._fittedCoordinatesField) if self._fittedCoordinatesField else
+                hostFieldmodule.createFieldConstant(1.0))
             if self._hostBoundaryMesh:
                 self._fittedBoundaryGroup = hostFieldmodule.createFieldGroup()
                 self._fittedBoundaryGroup.setName("fitted boundary")
                 self._fittedBoundaryGroup.setSubelementHandlingMode(FieldGroup.SUBELEMENT_HANDLING_MODE_FULL)
                 self._fittedBoundaryMeshGroup =\
                     self._fittedBoundaryGroup.createFieldElementGroup(self._hostBoundaryMesh).getMeshGroup()
-                self._fittedBoundaryMeshGroup.addElementsConditional(hostFieldmodule.createFieldIsExterior())
+                self._fittedBoundaryMeshGroup.addElementsConditional(
+                    hostFieldmodule.createFieldAnd(self._fittedGroup, hostFieldmodule.createFieldIsExterior()))
 
             result = self._hostRegion.readFile(self._zincScaffoldFileName)
             assert result == RESULT_OK, "Failed to load scaffold file" + str(self._zincScaffoldFileName)
@@ -829,6 +830,7 @@ class DataEmbedder:
                         "' defined on it. Defining material coordinates on it with name '" +
                         outputDataMaterialCoordinatesFieldName + "' instead.", file=sys.stderr)
                     break
+            buffers = []
             for outputDataCoordinatesFieldName in outputDataCoordinatesFieldNames:
                 outputDataCoordinatesField = outputDataFieldmodule.findFieldByName(outputDataCoordinatesFieldName)
                 # temporarily rename field for output
@@ -836,6 +838,9 @@ class DataEmbedder:
                 sir = self._outputDataRegion.createStreaminformationRegion()
                 srm = sir.createStreamresourceMemory()
                 sir.setResourceFieldNames(srm, [outputDataMaterialCoordinatesFieldName])
+                if outputDataCoordinatesFieldName != outputDataCoordinatesFieldNames[0]:
+                    # markers should only be datapoints
+                    sir.setResourceDomainTypes(srm, Field.DOMAIN_TYPE_DATAPOINTS)
                 # workaround for Zinc writing empty groups when no members have above field defined on them
                 sir.setResourceGroupName(srm, embedGroup.getName())
                 self._outputDataRegion.write(sir)
@@ -843,12 +848,14 @@ class DataEmbedder:
                 assert result == RESULT_OK, "Failed to write data coordinates to memory"
                 # restore field name before reading back in the cloned field
                 outputDataCoordinatesField.setName(outputDataCoordinatesFieldName)
-                sir = self._outputDataRegion.createStreaminformationRegion()
+                buffers.append(buffer)
+            sir = self._outputDataRegion.createStreaminformationRegion()
+            for buffer in buffers:
                 sir.createStreamresourceMemoryBuffer(buffer)
-                result = self._outputDataRegion.read(sir)
-                if result != RESULT_OK:
-                    self.printLog()
-                    assert False, "Failed to define output material coordinates from memory buffer"
+            result = self._outputDataRegion.read(sir)
+            if result != RESULT_OK:
+                self.printLog()
+                assert False, "Failed to define output material coordinates from memory buffer"
             self._outputDataMaterialCoordinatesField = \
                 outputDataFieldmodule.findFieldByName(outputDataMaterialCoordinatesFieldName).castFiniteElement()
             assert self._outputDataMaterialCoordinatesField.isValid(), \
@@ -862,10 +869,13 @@ class DataEmbedder:
                 result = applyField.setBindArgumentSourceField(self._coordinatesArgumentField, field)
                 assert result == RESULT_OK, "Failed to set bind argument source field in output"
                 fieldassignment = self._outputDataMaterialCoordinatesField.createFieldassignment(applyField)
-                for nodeset in (outputNodes, outputDatapoints):
+                for nodeset in ((outputNodes, outputDatapoints)
+                        if (outputDataCoordinatesFieldName == outputDataCoordinatesFieldNames[0])
+                        else (outputDatapoints,)):
                     fieldassignment.setNodeset(nodeset)
                     result = fieldassignment.assign()
-                    assert result in (RESULT_OK, RESULT_WARNING_PART_DONE), "Failed to assign material coordinates"
+                    assert result in (RESULT_OK, RESULT_WARNING_PART_DONE, RESULT_ERROR_NOT_FOUND), \
+                        "Failed to assign material coordinates"
 
         self._needGenerateOutput = False
         return self._outputDataRegion

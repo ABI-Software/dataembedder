@@ -22,7 +22,7 @@ readme = readfile("README.rst", split=True)
 requires = [
     # minimal requirements listing
     "opencmiss.utils >= 0.3",
-    "opencmiss.zinc >= 3.7"
+    "opencmiss.zinc >= 3.10"
 ]
 readme.extend(['', 'License', '=======', '', '::', ''])
 source_license = readfile("LICENSE")
