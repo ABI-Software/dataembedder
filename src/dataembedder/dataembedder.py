@@ -742,7 +742,7 @@ class DataEmbedder:
         groupDict = self._groupData.get(groupName)
         if groupDict:
             return groupDict[self._dimensionToken]
-        print("DataEmbedder getGroupDimension: no group of name " + str(groupName), file=sys.stderr)
+        print("DataEmbedder getDataGroupDimension: no group of name " + str(groupName), file=sys.stderr)
         return 0
 
     def isDataGroupEmbed(self, groupName: str) -> bool:
@@ -754,7 +754,7 @@ class DataEmbedder:
         groupDict = self._groupData.get(groupName)
         if groupDict:
             return groupDict[self._embedToken]
-        print("DataEmbedder isGroupEmbed: no group of name " + str(groupName), file=sys.stderr)
+        print("DataEmbedder isDataGroupEmbed: no group of name " + str(groupName), file=sys.stderr)
         return False
 
     def setDataGroupEmbed(self, groupName: str, embed: bool):
@@ -772,7 +772,7 @@ class DataEmbedder:
                 self._needGenerateOutput = True
                 return True
         else:
-            print("DataEmbedder groupSetEmbed: no group of name " + str(groupName), file=sys.stderr)
+            print("DataEmbedder setDataGroupEmbed: no group of name " + str(groupName), file=sys.stderr)
         return False
 
     def getDataGroupSize(self, groupName: str) -> int:
@@ -784,7 +784,7 @@ class DataEmbedder:
         groupDict = self._groupData.get(groupName)
         if groupDict:
             return groupDict[self._sizeToken]
-        print("DataEmbedder getGroupSize: no group of name " + str(groupName), file=sys.stderr)
+        print("DataEmbedder getDataGroupSize: no group of name " + str(groupName), file=sys.stderr)
         return -1
 
     def printLog(self):
@@ -921,24 +921,25 @@ class DataEmbedder:
                 assert False, "Failed to define output material coordinates from memory buffer"
             self._outputDataMaterialCoordinatesField = \
                 outputDataFieldmodule.findFieldByName(outputDataMaterialCoordinatesFieldName).castFiniteElement()
-            assert self._outputDataMaterialCoordinatesField.isValid(), \
-                "Failed to define output material coordinates field"
             del embedGroup
-
-            # now do the embedding: evaluate material coordinates in output region
-            for outputDataCoordinatesFieldName in outputDataCoordinatesFieldNames:
-                field = outputDataFieldmodule.findFieldByName(outputDataCoordinatesFieldName).castFiniteElement()
-                applyField = outputDataFieldmodule.createFieldApply(self._hostFindMaterialCoordinatesField)
-                result = applyField.setBindArgumentSourceField(self._coordinatesArgumentField, field)
-                assert result == RESULT_OK, "Failed to set bind argument source field in output"
-                fieldassignment = self._outputDataMaterialCoordinatesField.createFieldassignment(applyField)
-                for nodeset in ((outputNodes, outputDatapoints)
-                        if (outputDataCoordinatesFieldName == outputDataCoordinatesFieldNames[0])
-                        else (outputDatapoints,)):
-                    fieldassignment.setNodeset(nodeset)
-                    result = fieldassignment.assign()
-                    assert result in (RESULT_OK, RESULT_WARNING_PART_DONE, RESULT_ERROR_NOT_FOUND), \
-                        "Failed to assign material coordinates"
+            if self._outputDataMaterialCoordinatesField.isValid():
+                # now do the embedding: evaluate material coordinates in output region
+                for outputDataCoordinatesFieldName in outputDataCoordinatesFieldNames:
+                    field = outputDataFieldmodule.findFieldByName(outputDataCoordinatesFieldName).castFiniteElement()
+                    applyField = outputDataFieldmodule.createFieldApply(self._hostFindMaterialCoordinatesField)
+                    result = applyField.setBindArgumentSourceField(self._coordinatesArgumentField, field)
+                    assert result == RESULT_OK, "Failed to set bind argument source field in output"
+                    fieldassignment = self._outputDataMaterialCoordinatesField.createFieldassignment(applyField)
+                    for nodeset in ((outputNodes, outputDatapoints)
+                            if (outputDataCoordinatesFieldName == outputDataCoordinatesFieldNames[0])
+                            else (outputDatapoints,)):
+                        fieldassignment.setNodeset(nodeset)
+                        result = fieldassignment.assign()
+                        assert result in (RESULT_OK, RESULT_WARNING_PART_DONE, RESULT_ERROR_NOT_FOUND), \
+                            "Failed to assign material coordinates"
+            else:
+                if self._diagnosticLevel > 0:
+                    print("No embedded data / failed to define output material coordinates field", file=sys.stderr)
 
         self._needGenerateOutput = False
         return self._outputDataRegion
@@ -950,10 +951,10 @@ class DataEmbedder:
         """
         Get a field giving host coordinates from data material coordinates. For UI/visualisation use.
         :param hostCoordinatesField: Field to evaluate on host.
-        :return: Field giving host coordinates on data at matching material coordinates.
+        :return: Field giving host coordinates on data at matching material coordinates, or an invalid field if none.
         """
         if not hostCoordinatesField:
-            return None
+            return Field()
         assert hostCoordinatesField.getFieldmodule().getRegion() == self._hostRegion
         hostFieldmodule = self._hostRegion.getFieldmodule()
         with ChangeManager(hostFieldmodule):
