@@ -49,6 +49,9 @@ class DataEmbedder:
         self._hostMarkerGroupName = None
         self._hostMarkerLocationField = None
         self._hostMarkerNameField = None
+        self._hostProjectionGroup = None
+        self._hostProjectionGroupName = None
+        self._hostProjectionMeshGroup = None
         self._dataCoordinatesField = None
         self._dataCoordinatesFieldName = None
         self._dataMarkerGroup = None
@@ -75,6 +78,7 @@ class DataEmbedder:
         self._fittedCoordinatesFieldName = dct.get("fittedCoordinatesField")
         self._materialCoordinatesFieldName = dct.get("materialCoordinatesField")
         self._hostMarkerGroupName = dct.get("hostMarkerGroup")
+        self._hostProjectionGroupName = dct.get("hostProjectionGroup")
         self._dataCoordinatesFieldName = dct.get("dataCoordinatesField")
         self._dataMarkerGroupName = dct.get("dataMarkerGroup")
         self._diagnosticLevel = dct["diagnosticLevel"]
@@ -88,6 +92,7 @@ class DataEmbedder:
             "fittedCoordinatesField": self._fittedCoordinatesFieldName,
             "materialCoordinatesField": self._materialCoordinatesFieldName,
             "hostMarkerGroup": self._hostMarkerGroupName,
+            "hostProjectionGroup": self._hostProjectionGroupName,
             "dataCoordinatesField": self._dataCoordinatesFieldName,
             "dataMarkerGroup": self._dataMarkerGroupName,
             "diagnosticLevel": self._diagnosticLevel,
@@ -105,6 +110,8 @@ class DataEmbedder:
         self._hostMarkerGroup = None
         self._hostMarkerLocationField = None
         self._hostMarkerNameField = None
+        self._hostProjectionGroup = None
+        self._hostProjectionMeshGroup = None
         self._dataCoordinatesField = None
         self._dataMarkerGroup = None
         self._dataMarkerCoordinatesField = None
@@ -188,7 +195,19 @@ class DataEmbedder:
         self._hostMarkerNameField = None
         hostMarkerGroup = self._hostRegion.getFieldmodule().findFieldByName(
             self._hostMarkerGroupName if self._hostMarkerGroupName else "marker").castGroup()
-        self.setHostMarkerGroup(hostMarkerGroup if hostMarkerGroup.isValid() else None)
+        if not hostMarkerGroup.isValid():
+            hostMarkerGroup = None
+        self.setHostMarkerGroup(hostMarkerGroup)
+
+    def _discoverHostProjectionGroup(self):
+        self._hostProjectionGroup = None
+        self._hostProjectionMeshGroup = None
+        hostProjectionGroup = None
+        if self._hostProjectionGroupName:
+            hostProjectionGroup = self._hostRegion.getFieldmodule().findFieldByName(self._hostProjectionGroupName)
+            if not hostProjectionGroup.isValid():
+                hostProjectionGroup = None
+        self.setHostProjectionGroup(hostProjectionGroup)
 
     def _discoverDataMarkerGroup(self):
         self._dataMarkerGroup = None
@@ -208,7 +227,8 @@ class DataEmbedder:
                     self._fittedCoordinatesField.getNumberOfComponents())
                 findMeshLocationField = hostFieldmodule.createFieldFindMeshLocation(
                     self._coordinatesArgumentField, self._fittedCoordinatesField, self._hostMesh)
-                findMeshLocationField.setSearchMesh(self._fittedMeshGroup)
+                searchMesh = self._hostProjectionMeshGroup if self._hostProjectionMeshGroup else self._fittedMeshGroup
+                findMeshLocationField.setSearchMesh(searchMesh)
                 findMeshLocationField.setSearchMode(FieldFindMeshLocation.SEARCH_MODE_NEAREST)
                 self._hostFindMaterialCoordinatesField = hostFieldmodule.createFieldEmbedded(
                     self._materialCoordinatesField, findMeshLocationField)
@@ -362,8 +382,6 @@ class DataEmbedder:
             if self._materialCoordinatesField:
                 self._materialCoordinatesFieldName = self._materialCoordinatesField.getName()
 
-            self._buildEmbeddedMapFields()
-
             dataFieldmodule = self._dataRegion.getFieldmodule()
             result = self._dataRegion.readFile(self._zincDataFileName)
             assert result == RESULT_OK, "Failed to load data file" + str(self._zincDataFileName)
@@ -372,6 +390,8 @@ class DataEmbedder:
                 self._dataCoordinatesFieldName = self._dataCoordinatesField.getName()
 
             self._discoverHostMarkerGroup()
+            self._discoverHostProjectionGroup()
+            self._buildEmbeddedMapFields()
             self._discoverDataMarkerGroup()
             self._buildDataGroups()
 
@@ -565,6 +585,49 @@ class DataEmbedder:
         :return: Field if valid, otherwise None.
         """
         return self._hostMarkerNameField
+
+    def getHostProjectionGroup(self):
+        return self._hostProjectionGroup
+
+    def setHostProjectionGroup(self, hostProjectionGroup: FieldGroup):
+        """
+        Set the group in the host region for limiting embedded locations to be within.
+        :param hostProjectionGroup: Projection group in host region, or None.
+        :return: True if group changed, otherwise False.
+        """
+        if hostProjectionGroup == self._hostProjectionGroup:
+            return False
+        assert (hostProjectionGroup is None) or (hostProjectionGroup.castGroup().isValid() and
+               (hostProjectionGroup.getFieldmodule().getRegion() == self._hostRegion))
+        self._hostProjectionMeshGroup = None
+        if hostProjectionGroup:
+            self._hostProjectionGroup = hostProjectionGroup.castGroup()
+            self._hostProjectionGroupName = self._hostProjectionGroup.getName()
+            # get highest dimension non-empty mesh group
+            hostFieldmodule = self._hostRegion.getFieldmodule()
+            with ChangeManager(hostFieldmodule):
+                for dimension in range(3, 0, -1):
+                    mesh = hostFieldmodule.findMeshByDimension(dimension)
+                    elementGroupField = self._hostProjectionGroup.getFieldElementGroup(mesh)
+                    if elementGroupField.isValid():
+                        meshGroup = elementGroupField.getMeshGroup()
+                        if meshGroup.getSize() > 0:
+                            # intersect with self._fittedGroup:
+                            self._hostProjectionMeshGroup = hostFieldmodule.createFieldElementGroup(mesh).getMeshGroup()
+                            self._hostProjectionMeshGroup.addElementsConditional(
+                                hostFieldmodule.createFieldAnd(self._fittedGroup, self._hostProjectionGroup))
+                            if self._hostProjectionMeshGroup.getSize() == 0:
+                                self._hostProjectionMeshGroup = None
+                            else:
+                                if self._hostProjectionMeshGroup.getSize() == meshGroup.getSize():
+                                    self._hostProjectionMeshGroup = meshGroup  # meshGroup was already intersection
+                                break;
+        else:
+            self._hostProjectionGroup = None
+            self._hostProjectionGroupName = None
+        self._buildEmbeddedMapFields()
+        self._needGenerateOutput = True
+        return True
 
     def getDataCoordinatesField(self) -> FieldFiniteElement:
         """
@@ -896,6 +959,9 @@ class DataEmbedder:
         with ChangeManager(hostFieldmodule):
             findMaterialMeshLocationField = hostFieldmodule.createFieldFindMeshLocation(
                 self._coordinatesArgumentField, self._materialCoordinatesField, self._hostMesh)
+            # following give same result as when not set, only much faster or just faster, respectively
+            searchMesh = self._hostProjectionMeshGroup if self._hostProjectionMeshGroup else self._fittedMeshGroup
+            findMaterialMeshLocationField.setSearchMesh(searchMesh)
             # use SEARCH_MODE_NEAREST as derivatives or minor errors may give locations outside host mesh
             findMaterialMeshLocationField.setSearchMode(FieldFindMeshLocation.SEARCH_MODE_NEAREST)
             embeddedHostCoordinatesField =\

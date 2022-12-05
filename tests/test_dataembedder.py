@@ -20,7 +20,6 @@ class DataEmbedderTestCase(unittest.TestCase):
         """
         Test embedding an example model consisting of a cube, square and line elements embedded in two cubes mesh.
         """
-
         zincScaffoldFileName = os.path.join(here, "resources", "body_two_cubes_scaffold.exf")
         zincFittedGeometryFileName = os.path.join(here, "resources", "body_two_cubes_fitted0.exf")
         zincDataFileName = os.path.join(here, "resources", "data_cube_square_line.exf")
@@ -87,11 +86,12 @@ class DataEmbedderTestCase(unittest.TestCase):
         TOL = 1.0E-12
         for group in outputGroups:
             groupName = group.getName()
+            expectedRange = expectedBodyCoordinatesRange[groupName]
             nodeset = outputNodes if groupName in ("cube", "square", "line", "nerve") else outputDatapoints
-            minX, maxX = evaluate_field_nodeset_range(outputBodyCoordinates,
-                                                    group.getFieldNodeGroup(nodeset).getNodesetGroup())
-            assertAlmostEqualList(self, minX, expectedBodyCoordinatesRange[groupName][0], TOL)
-            assertAlmostEqualList(self, maxX, expectedBodyCoordinatesRange[groupName][1], TOL)
+            minX, maxX = evaluate_field_nodeset_range(
+                outputBodyCoordinates, group.getFieldNodeGroup(nodeset).getNodesetGroup())
+            assertAlmostEqualList(self, minX, expectedRange[0], TOL)
+            assertAlmostEqualList(self, maxX, expectedRange[1], TOL)
 
         # change some settings to test serialisation
         coordinatesField = dataEmbedder.getHostRegion().getFieldmodule().findFieldByName("fitted coordinates")
@@ -119,6 +119,71 @@ class DataEmbedderTestCase(unittest.TestCase):
         self.assertTrue(dataEmbedder2.isDataGroupEmbed("nerve"))
         self.assertTrue(dataEmbedder2.isDataGroupEmbed("bottom"))
         self.assertFalse(dataEmbedder2.isDataGroupEmbed("marker"))
+
+    def test_projection_group(self):
+        """
+        Test projection onto a specified group rather than the whole fitted group.
+        """
+        zincScaffoldFileName = os.path.join(here, "resources", "body_two_cubes_scaffold.exf")
+        zincFittedGeometryFileName = os.path.join(here, "resources", "body_two_cubes_fitted0.exf")
+        zincDataFileName = os.path.join(here, "resources", "data_cube_square_line.exf")
+        dataEmbedder = DataEmbedder(zincScaffoldFileName, zincFittedGeometryFileName, zincDataFileName)
+        dataEmbedder.load()
+        # check fields and group data automatically determined
+        groupNames = dataEmbedder.getDataGroupNames()
+        self.assertEqual(7, len(groupNames))
+        # only embed nerve, which is near the top group
+        self.assertTrue(dataEmbedder.setDataGroupEmbed("cube", False))
+        self.assertTrue(dataEmbedder.setDataGroupEmbed("square", False))
+        self.assertTrue(dataEmbedder.setDataGroupEmbed("line", False))
+        self.assertTrue(dataEmbedder.setDataGroupEmbed("ICN", False))
+        self.assertTrue(dataEmbedder.isDataGroupEmbed("nerve"))
+        self.assertFalse(dataEmbedder.isDataGroupEmbed("bottom"))
+        self.assertFalse(dataEmbedder.isDataGroupEmbed("marker"))
+        # test get/set host projection group
+        hostFieldmodule = dataEmbedder.getHostRegion().getFieldmodule()
+        topGroup = hostFieldmodule.findFieldByName("top").castGroup()
+        self.assertTrue(topGroup.isValid())
+        self.assertIsNone(dataEmbedder.getHostProjectionGroup())
+        self.assertTrue(dataEmbedder.setHostProjectionGroup(topGroup))
+        self.assertEqual(topGroup, dataEmbedder.getHostProjectionGroup())
+
+        outputRegion = dataEmbedder.generateOutput()
+        self.assertTrue(outputRegion.isValid())
+
+        # check output
+        # note that the nerve group coordinates were partially outside the host domain,
+        # and with the hostProjectionGroup=top the internal parts are also projected onto top
+        outputFieldmodule = outputRegion.getFieldmodule()
+        outputBodyCoordinates = outputFieldmodule.findFieldByName("body coordinates").castFiniteElement()
+        self.assertTrue(outputBodyCoordinates.isValid())
+        outputGroups = get_group_list(outputFieldmodule)
+        self.assertEqual(2, len(outputGroups))
+        expectedBodyCoordinatesRange = {
+            'marker': None,
+            'nerve': ([0.6828751816342856, 0.11560627908676875, 1.0],
+                [1.4324429293759136, 0.7882952832850846, 1.0])}
+        outputNodes = outputFieldmodule.findNodesetByFieldDomainType(Field.DOMAIN_TYPE_NODES)
+        TOL = 1.0E-12
+        for group in outputGroups:
+            groupName = group.getName()
+            expectedRange = expectedBodyCoordinatesRange[groupName]
+            if expectedRange:
+                minX, maxX = evaluate_field_nodeset_range(
+                    outputBodyCoordinates, group.getFieldNodeGroup(outputNodes).getNodesetGroup())
+                assertAlmostEqualList(self, minX, expectedRange[0], TOL)
+                assertAlmostEqualList(self, maxX, expectedRange[1], TOL)
+
+        # test serialisation
+        jsonString = dataEmbedder.encodeSettingsJSON()
+        dataEmbedder2 = DataEmbedder(zincScaffoldFileName, zincFittedGeometryFileName, zincDataFileName)
+        dataEmbedder2.decodeSettingsJSON(jsonString)
+        dataEmbedder2.load()
+        # test hostProjectionGroup is rediscovered
+        hostFieldmodule2 = dataEmbedder2.getHostRegion().getFieldmodule()
+        topGroup2 = hostFieldmodule2.findFieldByName("top").castGroup()
+        self.assertTrue(topGroup2.isValid())
+        self.assertEqual(topGroup2, dataEmbedder2.getHostProjectionGroup())
 
 
 if __name__ == "__main__":
