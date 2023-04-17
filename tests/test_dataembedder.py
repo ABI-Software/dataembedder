@@ -1,8 +1,8 @@
 import os
 import unittest
-from opencmiss.utils.zinc.field import get_group_list
-from opencmiss.utils.zinc.finiteelement import evaluate_field_nodeset_range
-from opencmiss.zinc.field import Field
+from cmlibs.utils.zinc.field import get_group_list
+from cmlibs.utils.zinc.finiteelement import evaluate_field_nodeset_range
+from cmlibs.zinc.field import Field
 from dataembedder.dataembedder import DataEmbedder
 
 here = os.path.abspath(os.path.dirname(__file__))

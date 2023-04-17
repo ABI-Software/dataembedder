@@ -4,13 +4,13 @@ Main class for fitting scaffolds.
 
 import json
 import sys
-from opencmiss.utils.zinc.field import get_group_list, get_unique_field_name
-from opencmiss.utils.zinc.general import ChangeManager, HierarchicalChangeManager
-from opencmiss.zinc.context import Context
-from opencmiss.zinc.element import Mesh, MeshGroup
-from opencmiss.zinc.field import Field, FieldFindMeshLocation, FieldFiniteElement, FieldGroup
-from opencmiss.zinc.region import Region
-from opencmiss.zinc.result import RESULT_ERROR_NOT_FOUND, RESULT_OK, RESULT_WARNING_PART_DONE
+from cmlibs.utils.zinc.field import get_group_list, get_unique_field_name
+from cmlibs.utils.zinc.general import ChangeManager, HierarchicalChangeManager
+from cmlibs.zinc.context import Context
+from cmlibs.zinc.element import Mesh, MeshGroup
+from cmlibs.zinc.field import Field, FieldFindMeshLocation, FieldFiniteElement, FieldGroup
+from cmlibs.zinc.region import Region
+from cmlibs.zinc.result import RESULT_ERROR_NOT_FOUND, RESULT_OK, RESULT_WARNING_PART_DONE
 
 
 class DataEmbedder:
