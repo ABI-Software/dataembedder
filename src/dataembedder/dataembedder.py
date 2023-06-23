@@ -177,7 +177,7 @@ class DataEmbedder:
             largestGroupName = None
             largestSize = 0
             for group in get_group_list(fieldmodule):
-                meshGroup = group.getFieldElementGroup(mesh).getMeshGroup()
+                meshGroup = group.getMeshGroup(mesh)
                 if meshGroup.isValid():
                     thisSize = meshGroup.getSize()
                     if thisSize > largestSize:
@@ -244,7 +244,7 @@ class DataEmbedder:
             hostFieldmodule = self._hostRegion.getFieldmodule()
             fieldcache = hostFieldmodule.createFieldcache()
             hostNodes = hostFieldmodule.findNodesetByFieldDomainType(Field.DOMAIN_TYPE_NODES)
-            hostMarkerNodesetGroup = self._hostMarkerGroup.getFieldNodeGroup(hostNodes).getNodesetGroup()
+            hostMarkerNodesetGroup = self._hostMarkerGroup.getNodesetGroup(hostNodes)
             nodeiter = hostMarkerNodesetGroup.createNodeiterator()
             node = nodeiter.next()
             while node.isValid():
@@ -276,14 +276,14 @@ class DataEmbedder:
             groupSize = 0
             groupDimension = 0
             for dimension in range(maxDimension, 0, -1):
-                elementGroup = group.getFieldElementGroup(dataMesh[dimension])
-                if elementGroup.isValid():
-                    groupSize = elementGroup.getMeshGroup().getSize()
+                meshGroup = group.getMeshGroup(dataMesh[dimension])
+                if meshGroup.isValid():
+                    groupSize = meshGroup.getSize()
                     if groupSize > 0:
                         groupDimension = dimension
                         break
             if groupSize == 0:
-                nodesetGroup = group.getFieldNodeGroup(datapoints).getNodesetGroup()
+                nodesetGroup = group.getNodesetGroup(datapoints)
                 if nodesetGroup.isValid():
                     groupSize = nodesetGroup.getSize()
             embed = not (groupIsInHost or (groupSize == 0) or (group == self._dataMarkerGroup))
@@ -297,7 +297,7 @@ class DataEmbedder:
         if self._dataMarkerGroup and self._dataMarkerNameField:
             fieldcache = dataFieldmodule.createFieldcache()
             hostMarkerNames = self._getHostMarkerNames()
-            dataMarkerNodesetGroup = self._dataMarkerGroup.getFieldNodeGroup(datapoints).getNodesetGroup()
+            dataMarkerNodesetGroup = self._dataMarkerGroup.getNodesetGroup(datapoints)
             markerGroupData = {}
             nodeiter = dataMarkerNodesetGroup.createNodeiterator()
             node = nodeiter.next()
@@ -360,7 +360,7 @@ class DataEmbedder:
             self._fittedGroup = hostFieldmodule.createFieldGroup()
             self._fittedGroup.setName("fitted")
             self._fittedGroup.setSubelementHandlingMode(FieldGroup.SUBELEMENT_HANDLING_MODE_FULL)
-            self._fittedMeshGroup = self._fittedGroup.createFieldElementGroup(self._hostMesh).getMeshGroup()
+            self._fittedMeshGroup = self._fittedGroup.createMeshGroup(self._hostMesh)
             self._fittedMeshGroup.addElementsConditional(
                 hostFieldmodule.createFieldIsDefined(self._fittedCoordinatesField) if self._fittedCoordinatesField else
                 hostFieldmodule.createFieldConstant(1.0))
@@ -369,7 +369,7 @@ class DataEmbedder:
                 self._fittedBoundaryGroup.setName("fitted boundary")
                 self._fittedBoundaryGroup.setSubelementHandlingMode(FieldGroup.SUBELEMENT_HANDLING_MODE_FULL)
                 self._fittedBoundaryMeshGroup =\
-                    self._fittedBoundaryGroup.createFieldElementGroup(self._hostBoundaryMesh).getMeshGroup()
+                    self._fittedBoundaryGroup.createMeshGroup(self._hostBoundaryMesh)
                 self._fittedBoundaryMeshGroup.addElementsConditional(
                     hostFieldmodule.createFieldAnd(self._fittedGroup, hostFieldmodule.createFieldIsExterior()))
 
@@ -532,7 +532,7 @@ class DataEmbedder:
         self._hostMarkerGroupName = self._hostMarkerGroup.getName()
         hostFieldmodule = self._hostRegion.getFieldmodule()
         nodes = hostFieldmodule.findNodesetByFieldDomainType(Field.DOMAIN_TYPE_NODES)
-        markerNodesetGroup = self._hostMarkerGroup.getFieldNodeGroup(nodes).getNodesetGroup()
+        markerNodesetGroup = self._hostMarkerGroup.getNodesetGroup(nodes)
         if markerNodesetGroup.isValid():
             node = markerNodesetGroup.createNodeiterator().next()
             if node.isValid():
@@ -562,7 +562,7 @@ class DataEmbedder:
         hostFieldmodule = self._hostRegion.getFieldmodule()
         # return field directly if it is defined on markers
         nodes = hostFieldmodule.findNodesetByFieldDomainType(Field.DOMAIN_TYPE_NODES)
-        markerNodesetGroup = self._hostMarkerGroup.getFieldNodeGroup(nodes).getNodesetGroup()
+        markerNodesetGroup = self._hostMarkerGroup.getNodesetGroup(nodes)
         fieldcache = None
         if markerNodesetGroup.isValid():
             node = markerNodesetGroup.createNodeiterator().next()
@@ -608,20 +608,18 @@ class DataEmbedder:
             with ChangeManager(hostFieldmodule):
                 for dimension in range(3, 0, -1):
                     mesh = hostFieldmodule.findMeshByDimension(dimension)
-                    elementGroupField = self._hostProjectionGroup.getFieldElementGroup(mesh)
-                    if elementGroupField.isValid():
-                        meshGroup = elementGroupField.getMeshGroup()
-                        if meshGroup.getSize() > 0:
-                            # intersect with self._fittedGroup:
-                            self._hostProjectionMeshGroup = hostFieldmodule.createFieldElementGroup(mesh).getMeshGroup()
-                            self._hostProjectionMeshGroup.addElementsConditional(
-                                hostFieldmodule.createFieldAnd(self._fittedGroup, self._hostProjectionGroup))
-                            if self._hostProjectionMeshGroup.getSize() == 0:
-                                self._hostProjectionMeshGroup = None
-                            else:
-                                if self._hostProjectionMeshGroup.getSize() == meshGroup.getSize():
-                                    self._hostProjectionMeshGroup = meshGroup  # meshGroup was already intersection
-                                break;
+                    meshGroup = self._hostProjectionGroup.getMeshGroup(mesh)
+                    if meshGroup.isValid() and (meshGroup.getSize() > 0):
+                        # intersect with self._fittedGroup:
+                        self._hostProjectionMeshGroup = hostFieldmodule.createFieldGroup().createMeshGroup(mesh)
+                        self._hostProjectionMeshGroup.addElementsConditional(
+                            hostFieldmodule.createFieldAnd(self._fittedGroup, self._hostProjectionGroup))
+                        if self._hostProjectionMeshGroup.getSize() == 0:
+                            self._hostProjectionMeshGroup = None
+                        else:
+                            if self._hostProjectionMeshGroup.getSize() == meshGroup.getSize():
+                                self._hostProjectionMeshGroup = meshGroup  # meshGroup was already intersection
+                            break;
         else:
             self._hostProjectionGroup = None
             self._hostProjectionGroupName = None
@@ -678,7 +676,7 @@ class DataEmbedder:
         self._needGenerateOutput = True
         dataFieldmodule = self._dataRegion.getFieldmodule()
         datapoints = dataFieldmodule.findNodesetByFieldDomainType(Field.DOMAIN_TYPE_DATAPOINTS)
-        dataMarkerNodesetGroup = self._dataMarkerGroup.getFieldNodeGroup(datapoints).getNodesetGroup()
+        dataMarkerNodesetGroup = self._dataMarkerGroup.getNodesetGroup(datapoints)
         if dataMarkerNodesetGroup.isValid():
             node = dataMarkerNodesetGroup.createNodeiterator().next()
             if node.isValid():
@@ -817,9 +815,9 @@ class DataEmbedder:
             embedGroup = outputDataFieldmodule.createFieldGroup()
             embedMeshGroup = [None]
             for dimension in range(1, 4):
-                embedMeshGroup.append(embedGroup.createFieldElementGroup(outputMesh[dimension]).getMeshGroup())
-            embedNodeGroup = embedGroup.createFieldNodeGroup(outputNodes).getNodesetGroup()
-            embedDataGroup = embedGroup.createFieldNodeGroup(outputDatapoints).getNodesetGroup()
+                embedMeshGroup.append(embedGroup.createMeshGroup(outputMesh[dimension]))
+            embedNodeGroup = embedGroup.createNodesetGroup(outputNodes)
+            embedDataGroup = embedGroup.createNodesetGroup(outputDatapoints)
             outputDataMarkerGroup = None
             outputDataMarkerNameField = None
             if self._dataMarkerGroup:
@@ -847,10 +845,10 @@ class DataEmbedder:
                             del group
                             continue
                         group.setManaged(True)
-                        dataGroup = group.createFieldNodeGroup(outputDatapoints).getNodesetGroup()
+                        dataGroup = group.createNodesetGroup(outputDatapoints)
                         fieldcache = outputDataFieldmodule.createFieldcache()
                         outputDataMarkerDataGroup =\
-                            outputDataMarkerGroup.getFieldNodeGroup(outputDatapoints).getNodesetGroup()
+                            outputDataMarkerGroup.getNodesetGroup(outputDatapoints)
                         nodeiter = outputDataMarkerDataGroup.createNodeiterator()
                         node = nodeiter.next()
                         while node.isValid():

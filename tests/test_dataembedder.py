@@ -89,7 +89,7 @@ class DataEmbedderTestCase(unittest.TestCase):
             expectedRange = expectedBodyCoordinatesRange[groupName]
             nodeset = outputNodes if groupName in ("cube", "square", "line", "nerve") else outputDatapoints
             minX, maxX = evaluate_field_nodeset_range(
-                outputBodyCoordinates, group.getFieldNodeGroup(nodeset).getNodesetGroup())
+                outputBodyCoordinates, group.getNodesetGroup(nodeset))
             assertAlmostEqualList(self, minX, expectedRange[0], TOL)
             assertAlmostEqualList(self, maxX, expectedRange[1], TOL)
 
@@ -170,7 +170,7 @@ class DataEmbedderTestCase(unittest.TestCase):
             expectedRange = expectedBodyCoordinatesRange[groupName]
             if expectedRange:
                 minX, maxX = evaluate_field_nodeset_range(
-                    outputBodyCoordinates, group.getFieldNodeGroup(outputNodes).getNodesetGroup())
+                    outputBodyCoordinates, group.getNodesetGroup(outputNodes))
                 assertAlmostEqualList(self, minX, expectedRange[0], TOL)
                 assertAlmostEqualList(self, maxX, expectedRange[1], TOL)
 

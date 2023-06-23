@@ -21,15 +21,15 @@ readme = readfile("README.rst", split=True)
 # into the 'requirements.txt' file.
 requires = [
     # minimal requirements listing
-    "cmlibs.utils",
-    "cmlibs.zinc"
+    "cmlibs.utils >= 0.6",
+    "cmlibs.zinc >= 4.0"
 ]
 readme.extend(['', 'License', '=======', '', '::', ''])
 source_license = readfile("LICENSE")
 
 setup(
     name="dataembedder",
-    version="0.4.0",
+    version="0.5.0",
     description="Python library for embedding data and models in anatomical scaffolds using Zinc",
     long_description="\n".join(readme) + source_license,
     long_description_content_type="text/x-rst",
