@@ -29,7 +29,7 @@ source_license = readfile("LICENSE")
 
 setup(
     name="dataembedder",
-    version="0.5.0",
+    version="0.5.1",
     description="Python library for embedding data and models in anatomical scaffolds using Zinc",
     long_description="\n".join(readme) + source_license,
     long_description_content_type="text/x-rst",
